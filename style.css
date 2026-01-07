@@ -451,6 +451,27 @@ body::before {
   border-radius: 8px;
   font-family: Arial, sans-serif;
 }
+/* ===============================
+   PELOTA FLAC REBOTANDO
+================================ */
+#pelota-flac {
+    position: fixed;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #ffffff, #cccccc 45%, #000000);
+    color: #000;
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999999; /* arriba de TODO */
+    pointer-events: none;
+    user-select: none;
+    box-shadow: 0 0 20px rgba(255,255,255,0.6);
+}
+
 
 
 
