@@ -347,6 +347,7 @@ body::after {
 const VALOR_BLUE = 1250; 
 let vozMuteada = false;
 let voicesLoaded = false;
+let currentUtterance = null;
 
 // Fondo de estrellas dinámico
 const sContainer = document.getElementById('stars');
@@ -379,61 +380,93 @@ const guion = {
     p3: "Ahora sí... el Plan Avanzado. Trescientos cincuenta mil pesos argentinos. Esto es la nave nodriza completa. Tienda online profesional con carrito de compras, integración total con Mercado Pago, sistema de gestión de stock en tiempo real, panel de ventas con estadísticas, sistema de cupones y descuentos, envíos automáticos. Soporte VIP directo conmigo. Lucía vendía ropa por Instagram, perdía el cincuenta por ciento de las ventas porque no tenía forma de cobrar rápido. Le montamos la tienda completa. Sistema automatizado: el cliente compra, paga, recibe confirmación, todo sin que ella mueva un dedo. En cuatro meses facturó tres veces más que todo el año anterior. Esta es la tecnología que separa a los que sobreviven de los que dominan el mercado."
 };
 
-// Cargar voces disponibles
+// SOLUCIÓN MEJORADA PARA VOCES EN MÓVILES
 function loadVoices() {
     return new Promise((resolve) => {
         let voices = window.speechSynthesis.getVoices();
         if (voices.length > 0) {
             voicesLoaded = true;
+            console.log('Voces disponibles:', voices.map(v => `${v.name} (${v.lang})`));
             resolve(voices);
         } else {
             window.speechSynthesis.onvoiceschanged = () => {
                 voices = window.speechSynthesis.getVoices();
                 voicesLoaded = true;
+                console.log('Voces cargadas:', voices.map(v => `${v.name} (${v.lang})`));
                 resolve(voices);
             };
         }
     });
 }
 
-// Seleccionar mejor voz masculina disponible
+// Seleccionar mejor voz masculina disponible (mejorado para móviles)
 function getMaleVoice() {
     const voices = window.speechSynthesis.getVoices();
     
-    // Prioridad de voces masculinas para español
-    const preferredVoices = [
-        'Microsoft Pablo - Spanish (Argentina)',
-        'Google español de Estados Unidos',
-        'Jorge', // iOS/Mac
-        'Juan', // iOS/Mac
-        'Diego', // iOS/Mac
-        'es-AR', // Android
-        'es-US', // Android
-        'Spanish (Latin America)',
-        'Spanish Argentina'
+    // Detectar si es dispositivo móvil
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    console.log('Buscando voz masculina. Es móvil:', isMobile);
+    console.log('Voces disponibles:', voices.length);
+    
+    // Lista de voces masculinas conocidas por plataforma
+    const maleVoicePatterns = [
+        // iOS/Safari voces masculinas
+        'Jorge', 'Juan', 'Diego', 'Carlos', 'Sergio',
+        // Android voces masculinas
+        'es-ar-x-lad-network', 'es-ar-x-lad-local',
+        'es-us-x-sfb-network', 'es-us-x-sfb-local',
+        // Windows
+        'Microsoft Pablo', 'Microsoft Raul',
+        // Google Chrome
+        'Google español', 'Google español de Estados Unidos',
+        // Patrones generales
+        'Male', 'Hombre', 'Masculino'
     ];
     
-    // Buscar voz preferida
-    for (const preferred of preferredVoices) {
-        const voice = voices.find(v => 
-            v.name.includes(preferred) || 
-            v.lang.includes('es-AR') || 
-            v.lang.includes('es-US')
-        );
-        if (voice && !voice.name.toLowerCase().includes('female') && 
-            !voice.name.toLowerCase().includes('mujer')) {
+    // Nombres femeninos a evitar
+    const femaleNames = [
+        'Paulina', 'Monica', 'Mónica', 'Marisol', 'Angelica', 
+        'Luciana', 'Francisca', 'Female', 'Mujer', 'Femenino',
+        'Petra', 'Verónica', 'Isabella', 'Remedios'
+    ];
+    
+    // Buscar voz masculina específica
+    for (const pattern of maleVoicePatterns) {
+        const voice = voices.find(v => {
+            const matchesPattern = v.name.includes(pattern);
+            const isSpanish = v.lang.startsWith('es') || v.lang.includes('Spanish');
+            const notFemale = !femaleNames.some(fn => v.name.includes(fn));
+            return matchesPattern && isSpanish && notFemale;
+        });
+        
+        if (voice) {
+            console.log('✓ Voz masculina encontrada:', voice.name, voice.lang);
             return voice;
         }
     }
     
-    // Fallback: cualquier voz en español que no sea explícitamente femenina
-    return voices.find(v => 
-        (v.lang.startsWith('es') || v.lang.includes('Spanish')) &&
-        !v.name.toLowerCase().includes('female') &&
-        !v.name.toLowerCase().includes('mujer') &&
-        !v.name.toLowerCase().includes('mónica') &&
-        !v.name.toLowerCase().includes('paulina')
-    ) || voices.find(v => v.lang.startsWith('es'));
+    // Fallback: cualquier voz en español que NO sea explícitamente femenina
+    const spanishVoice = voices.find(v => {
+        const isSpanish = v.lang.startsWith('es') || v.lang.includes('Spanish');
+        const notFemale = !femaleNames.some(fn => v.name.toLowerCase().includes(fn.toLowerCase()));
+        return isSpanish && notFemale;
+    });
+    
+    if (spanishVoice) {
+        console.log('✓ Voz española neutral encontrada:', spanishVoice.name, spanishVoice.lang);
+        return spanishVoice;
+    }
+    
+    // Último recurso: primera voz en español
+    const firstSpanish = voices.find(v => v.lang.startsWith('es'));
+    if (firstSpanish) {
+        console.log('⚠ Usando primera voz española disponible:', firstSpanish.name, firstSpanish.lang);
+    } else {
+        console.log('⚠ No hay voces en español. Usando voz por defecto.');
+    }
+    
+    return firstSpanish || null;
 }
 
 function iniciarAbduccion() {
@@ -474,28 +507,42 @@ async function hablar(t, esIntro) {
     }
 
     const flash = document.getElementById('abduction-flash');
+    
+    // IMPORTANTE: Cancelar cualquier audio previo
     window.speechSynthesis.cancel();
     
+    // Pequeña pausa para asegurar que se canceló
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     const u = new SpeechSynthesisUtterance(t);
+    currentUtterance = u;
+    
+    // Configuración de idioma
     u.lang = "es-AR";
     
     // CONFIGURACIÓN DE VOZ MASCULINA PROFUNDA
-    u.pitch = 0.5;  // Grave (entre 0-2, default 1)
-    u.rate = 0.85;  // Velocidad pausada y seria
-    u.volume = 1;   // Volumen máximo
+    // Ajustes optimizados para móviles
+    u.pitch = 0.7;   // Más grave (0.5 puede sonar robótico en algunos dispositivos)
+    u.rate = 0.9;    // Velocidad natural pero pausada
+    u.volume = 1;    // Volumen máximo
 
     // Intentar usar voz masculina
     const maleVoice = getMaleVoice();
     if (maleVoice) {
         u.voice = maleVoice;
-        console.log('Usando voz:', maleVoice.name);
+        console.log('🎙️ Usando voz:', maleVoice.name, '| Pitch:', u.pitch, '| Rate:', u.rate);
+    } else {
+        console.log('⚠️ No se encontró voz masculina específica. Usando voz por defecto con pitch bajo.');
     }
 
     flash.classList.add('flicker-on');
+    
+    // Iniciar síntesis
     window.speechSynthesis.speak(u);
 
     u.onend = () => {
         flash.classList.remove('flicker-on');
+        currentUtterance = null;
         if(esIntro) desbloquearWeb();
         else {
             setTimeout(() => {
@@ -508,9 +555,15 @@ async function hablar(t, esIntro) {
     
     // Manejar errores
     u.onerror = (e) => {
-        console.error('Error en síntesis de voz:', e);
+        console.error('❌ Error en síntesis de voz:', e);
         flash.classList.remove('flicker-on');
+        currentUtterance = null;
         if(esIntro) desbloquearWeb();
+    };
+    
+    // Log de inicio
+    u.onstart = () => {
+        console.log('▶️ Reproduciendo voz...');
     };
 }
 
@@ -540,11 +593,29 @@ function toggleMute() {
     const btn = document.getElementById('mute-btn');
     btn.innerHTML = vozMuteada ? '🔇' : '🔊';
     btn.classList.toggle('muted', vozMuteada);
-    if(vozMuteada) window.speechSynthesis.cancel();
+    
+    if(vozMuteada) {
+        window.speechSynthesis.cancel();
+        currentUtterance = null;
+        console.log('🔇 Audio silenciado');
+    } else {
+        console.log('🔊 Audio activado');
+    }
 }
 
-// Cargar voces al inicio
+// Cargar voces al inicio y cuando estén disponibles
 loadVoices();
+
+// Re-cargar voces cuando cambien (importante para móviles)
+if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = () => {
+        loadVoices();
+    };
+}
+
+// Log de información del dispositivo
+console.log('📱 User Agent:', navigator.userAgent);
+console.log('🌐 Navegador soporta Web Speech API:', 'speechSynthesis' in window);
 </script>
 </body>
 </html>
